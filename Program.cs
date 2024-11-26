@@ -1,9 +1,14 @@
-﻿DateTime ptime;
-Actions CurrentAction = Actions.Nothing;
+﻿using System.Text;
+
+DateTime ptime;
+const ConsoleColor bgcol = ConsoleColor.DarkBlue;
+var Character = new Player();
+List<Projectile> projectiles = [];
+
 Console.OutputEncoding = System.Text.Encoding.Unicode;
 var t = new Thread(KeyboardInput);
 t.Start();
-Console.BackgroundColor = ConsoleColor.Blue;
+Console.BackgroundColor = bgcol;
 Console.Clear();
 Console.CursorVisible = false;
 
@@ -13,39 +18,12 @@ int h = Console.WindowHeight;
 int pos = w/2;
 
 // Clear the console window
-Console.SetCursorPosition(0, 0);
-for (int i = 0; i < h - 1; i++) {
-    Console.WriteLine(new String(' ', w));
-}
-Console.SetCursorPosition(0, 0);
 
 while (true) {
     ptime = DateTime.Now;
-
-    if (CurrentAction != Actions.Nothing) {
-        var cpos = Console.GetCursorPosition();
-        Console.CursorTop = h - 5;
-        ClearConsoleLine(w);
-        Console.CursorLeft = w / 2 - 5;
-        Console.Write($"""Moving {(CurrentAction == Actions.MoveLeft ? "Left" : "Right")}""");
-
-        if (CurrentAction == Actions.MoveLeft) {
-            pos = Math.Max(pos - 2, 0);
-        } else if (CurrentAction == Actions.MoveRight) {
-            pos = Math.Min(pos + 2, w - 2);
-        }
-
-        CurrentAction = Actions.Nothing;
-    }
-
-    Console.CursorTop = h - 3;
-    ClearConsoleLine(w);
-    Console.CursorLeft = pos;
-    Console.ForegroundColor = ConsoleColor.DarkRed;
-    Console.Write("\u2586\u2586"); // unicode 0x2586 -> "lower three quarters block"
-
-    Console.ForegroundColor = ConsoleColor.Black;
-
+    Console.CursorTop = Character.vpos;
+    ClearConsole(w);
+    Character.Draw();
     Thread.Sleep(Math.Max(0, 16 - DateTime.Now.Subtract(ptime).Milliseconds));
 }
 
@@ -54,23 +32,103 @@ void KeyboardInput() {
     while (true) {
         k = Console.ReadKey();
         if (k.Key == ConsoleKey.LeftArrow) {
-            CurrentAction = Actions.MoveLeft;
+            Character.MoveLeft();
         } else if (k.Key == ConsoleKey.RightArrow) {
-            CurrentAction = Actions.MoveRight;
+            Character.MoveRight();
         }
     }
 
 }
 
-void ClearConsoleLine(int w) {
-    Console.CursorLeft = 0;
-    Console.Write(new string(' ', w));
-    Console.CursorLeft = 0;
+void ClearConsole(int w) {
+    Console.SetCursorPosition(0, 0);
+    Console.BackgroundColor = bgcol;
+    for (int i = 0; i < h - 1; i++) {
+        Console.WriteLine(new String(' ', w));
+    }
+    Console.SetCursorPosition(0, 0);
 }
 
-enum Actions
+class Projectile
 {
-    Nothing = 0,
-    MoveLeft = 1,
-    MoveRight = 2
+    public int vpos;
+    public int hpos;
+    public bool deleted;
+
+    public Projectile(int hp, int vp) {
+        vpos = vp;
+        hpos = hp;
+        deleted = false;
+    }
+
+    public void Move() {
+        vpos--;
+        if (vpos <= 0) {
+            Delete();
+        }
+    }
+    public void Draw() {
+        if (deleted) return;
+
+        Console.CursorLeft = hpos;
+        Console.CursorTop = vpos;
+
+        Console.Write("\u275a");
+    }
+
+    public void Delete() {
+        deleted = true;
+    }
+}
+
+
+class Player
+{
+    public readonly int vpos = Console.BufferHeight - 3;
+    public readonly int ReloadMS = 250;
+    public readonly ConsoleColor bgcol = ConsoleColor.DarkBlue;
+    public readonly ConsoleColor fgcol = ConsoleColor.Magenta;
+    public readonly ConsoleColor projcol = ConsoleColor.Yellow;
+    public readonly string DrawingChars = new('\u2586', 3); // "lower three quarters block"
+    public System.Timers.Timer shootTimer;
+    public List<Projectile> Projectiles = [];
+    public int hpos;
+
+    public Player() {
+        hpos = Console.BufferWidth/2;
+        shootTimer = new(ReloadMS);
+        shootTimer.Elapsed += Shoot;
+        shootTimer.Start();
+    }
+
+    public void MoveLeft() {
+        hpos = Math.Max(hpos - 3, 0);
+    }
+    public void MoveRight() {
+        hpos = Math.Min(hpos + 3, Console.BufferWidth - 3);
+    }
+
+    public void Draw() {
+        Console.CursorTop = vpos;
+        Console.CursorLeft = hpos;
+        Console.BackgroundColor = bgcol;
+        Console.ForegroundColor = fgcol;
+        Console.Write(DrawingChars);
+        Console.ForegroundColor = projcol;
+        lock (Projectiles) {
+            foreach (var p in Projectiles) {
+                p.Draw();
+            }
+        }
+    }
+
+    public void Shoot(Object? source, System.Timers.ElapsedEventArgs e) {
+        lock (Projectiles) {
+            foreach (var p in Projectiles) {
+                p.Move();
+            }
+            Projectiles.RemoveAll(p => p.deleted);
+            Projectiles.Add(new Projectile(hpos + 1, vpos - 1));
+        }
+    }
 }
